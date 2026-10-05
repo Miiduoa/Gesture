@@ -1,228 +1,239 @@
 package com.example.gesture
 
+import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import com.example.gesture.ui.theme.GestureTheme
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-
 import androidx.compose.runtime.mutableStateOf
-
 import androidx.compose.runtime.remember
-
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.example.gesture.motion.MotionFeatures
+import com.example.gesture.motion.MotionState
+import com.example.gesture.motion.MotionWindow
+import com.example.gesture.ui.theme.GestureTheme
+import kotlin.math.sqrt
 
-import androidx.compose.foundation.layout.Column
-
-import androidx.compose.foundation.layout.Box
-
-import androidx.compose.foundation.background
-
-import androidx.compose.ui.graphics.Color
-
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.Image
-
-import androidx.compose.ui.res.painterResource
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.foundation.layout.offset
-import androidx.compose.ui.unit.IntOffset
-
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.rememberDraggableState
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             GestureTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    //  PointerEvents()
-                    Tap()
-                    Drag_Horizontal()
-                    Drag_Vertical()
-                    Ghost()
-                }
+                MotionLab()
             }
         }
     }
 }
 
 @Composable
+private fun MotionLab() {
+    val context = LocalContext.current
+    val sensorManager = remember {
+        context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    }
+    val accelerometer = remember {
+        sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    }
+    val window = remember { MotionWindow(capacity = 50, minSamples = 20) }
 
-fun PointerEvents() {
+    var x by remember { mutableStateOf(0f) }
+    var y by remember { mutableStateOf(0f) }
+    var z by remember { mutableStateOf(0f) }
+    var sampleCount by remember { mutableStateOf(0) }
+    var state by remember { mutableStateOf(MotionState.COLLECTING) }
+    var features by remember { mutableStateOf(MotionFeatures()) }
 
-    var msg by remember { mutableStateOf("作者：顧晉瑋") }
+    DisposableEffect(accelerometer) {
+        if (accelerometer == null) {
+            state = MotionState.UNAVAILABLE
+            onDispose { }
+        } else {
+            val listener = object : SensorEventListener {
+                override fun onSensorChanged(event: SensorEvent) {
+                    x = event.values[0]
+                    y = event.values[1]
+                    z = event.values[2]
 
-    Column {
+                    val magnitude = sqrt(x * x + y * y + z * z)
+                    val reading = window.add(magnitude)
 
-        Text("\n" + msg)
-
-        Box(
-
-            Modifier
-
-                .fillMaxSize()
-
-                .background(Color.Yellow)
-
-                .pointerInput(Unit) {
-
-                    awaitPointerEventScope {
-
-                        while (true) {
-
-                            val event = awaitPointerEvent()
-
-                            msg = "${event.type}, ${event.changes.first().position}"
-
-                        }
-
-                    }
-
+                    sampleCount = reading.sampleCount
+                    state = reading.state
+                    features = reading.features
                 }
 
-        )
+                override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+            }
 
+            sensorManager.registerListener(
+                listener,
+                accelerometer,
+                SensorManager.SENSOR_DELAY_GAME,
+            )
+
+            onDispose {
+                sensorManager.unregisterListener(listener)
+            }
+        }
     }
 
-}
-@Composable
-
-fun Tap() {
-
-    var msg by remember { mutableStateOf("TAP相關手勢實例") }
-    var count by remember { mutableStateOf(0) }
-    var offset1 by remember { mutableStateOf(Offset.Zero) }
-    var offset2 by remember { mutableStateOf(Offset.Zero) }
-
-    var PU = arrayListOf(R.drawable.pu0, R.drawable.pu1,
-        R.drawable.pu2, R.drawable.pu3,
-        R.drawable.pu4, R.drawable.pu5)
-    var Number by remember { mutableStateOf(3) }
-
-
-    Column {
-
-        Text("\n" + msg + "\n計數:" + count.toString(),
-            modifier = Modifier.pointerInput(Unit){
-                detectTapGestures(
-                    onPress = {count = 0}
-                )
-            }
-        )
-
-        Box(modifier = Modifier
-            .background(Color.Yellow)
-            .fillMaxWidth()
-            .pointerInput(Unit) {
-                detectDragGesturesAfterLongPress(
-                    onDrag = { change, dragAmount -> offset2+=dragAmount},
-                    onDragStart = { offset1 = it
-                        offset2 = it },
-                    onDragEnd = {
-                        // msg="從" + offset1.toString() + "拖曳到" + offset2.toString()
-
-                        if (offset2.x >= offset1.x){
-                            msg = "長按後向右拖曳"
-                            Number ++
-                            if (Number>5){Number=0}
-                        }
-                        else{
-                            msg = "長按後向左拖曳"
-                            Number --
-                            if (Number<0){Number=5}
-                        }
-                    }
-                )
-
-            }
-
-        ){
-            Text("")
-        }
-
-        Image(
-
-            painter = painterResource(id = PU[Number]),
-
-            contentDescription = "靜宜之美",
-
+    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = {msg = "後觸發onTap(短按)"
-                            count++},
-                        onDoubleTap = {msg = "雙擊"
-                            count+=3},
-                        onLongPress = {msg = "長按"
-                            count+=2},
-                        onPress = {msg = "先觸發onPress(按下)"}
-                    )
+                .padding(innerPadding)
+                .padding(horizontal = 20.dp, vertical = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = "Motion Lab",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "用加速度計的短視窗特徵判斷手機目前是穩定、移動，或出現明顯搖晃。",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            StatusCard(state = state, sampleCount = sampleCount)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                MetricCard("RMS", features.rms, Modifier.weight(1f))
+                MetricCard("Peak", features.peak, Modifier.weight(1f))
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("Raw accelerometer", fontWeight = FontWeight.SemiBold)
+                    AxisRow("X", x)
+                    AxisRow("Y", y)
+                    AxisRow("Z", z)
                 }
+            }
 
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "分類規則使用 |magnitude − 9.81| 的 RMS 與 peak。它是可解釋的 heuristic，不是人體活動辨識模型。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
 
-        )
-
+@Composable
+private fun StatusCard(state: MotionState, sampleCount: Int) {
+    val title = when (state) {
+        MotionState.COLLECTING -> "Collecting"
+        MotionState.STEADY -> "Steady"
+        MotionState.MOVING -> "Moving"
+        MotionState.SHAKE -> "Shake"
+        MotionState.UNAVAILABLE -> "Sensor unavailable"
     }
 
-}
-@Composable
-fun Drag_Horizontal() {
-    var offsetX by remember { mutableStateOf(0f) }
-    Text(
-        text = "水平拖曳",
+    Card(
         modifier = Modifier
-            .offset { IntOffset(offsetX.toInt(), 200) }
-            .draggable(
-                orientation= Orientation.Horizontal,
-                state = rememberDraggableState{ delta ->
-                    offsetX += delta
-                }
-            )
-    )
+            .fillMaxWidth()
+            .height(156.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+        ),
+        shape = RoundedCornerShape(24.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(20.dp),
+        ) {
+            Column(
+                modifier = Modifier.align(Alignment.CenterStart),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = if (state == MotionState.COLLECTING) {
+                        "$sampleCount samples · waiting for a full window"
+                    } else {
+                        "$sampleCount samples in current window"
+                    },
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+        }
+    }
 }
-@Composable
-fun Drag_Vertical() {
-    var offsetY by remember { mutableStateOf(0f) }
-    Text(
-        text = "垂直拖曳",
-        modifier = Modifier
-            .offset { IntOffset(600, offsetY.toInt() + 100) }
-            .draggable(
-                orientation= Orientation.Vertical,
-                state = rememberDraggableState{ delta ->
-                    offsetY += delta
-                }
-            )
-    )
-}
-@Composable
-fun Ghost() {
-    Image(
-        painter = painterResource(id = R.drawable.ghost1),
-        contentDescription = "幽靈1",
-        modifier = Modifier
-            .offset { IntOffset(x = 800, y = 200) }
-    )
 
-    Image(
-        painter = painterResource(id = R.drawable.ghost2),
-        contentDescription = "幽靈2",
-        modifier = Modifier
-            .offset { IntOffset(x = 300, y = 600) }
-    )
+@Composable
+private fun MetricCard(label: String, value: Float, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        tonalElevation = 2.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(label, style = MaterialTheme.typography.labelLarge)
+            Text(
+                text = "%.3f".format(value),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AxisRow(label: String, value: Float) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("%.3f m/s²".format(value), fontWeight = FontWeight.Medium)
+    }
 }
